@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
 	"github.com/spf13/cobra"
@@ -30,7 +31,7 @@ import (
 )
 
 type FlagType interface {
-	int | string | []string | bool | time.Duration | float64 | map[string][]string
+	int | string | []string | bool | time.Duration | float64 | map[string][]string | []MavenMirror
 }
 
 type Flag[T FlagType] struct {
@@ -113,7 +114,8 @@ func (f *Flag[T]) Parse() error {
 
 	value, ok := f.cast(v).(T)
 	if !ok {
-		return xerrors.Errorf("failed to parse flag %s", f.Name)
+		// Config-only flags have no name, so the config file key is the only locator.
+		return xerrors.Errorf("failed to parse flag %s", lo.Ternary(f.Name != "", f.Name, f.ConfigName))
 	}
 
 	if f.ValueNormalize != nil {
@@ -178,6 +180,14 @@ func (f *Flag[T]) cast(val any) any {
 		return cast.ToDuration(val)
 	case map[string][]string:
 		return cast.ToStringMapStringSlice(val)
+	case []MavenMirror:
+		// cast doesn't support structs, so the config file value is decoded here.
+		var mirrors []MavenMirror
+		if err := mapstructure.Decode(val, &mirrors); err != nil {
+			// Parse turns the nil into an error, as the cast to T fails.
+			return nil
+		}
+		return mirrors
 	case []string:
 		if s, ok := val.(string); ok && strings.Contains(s, ",") {
 			// Split environmental variables by comma as it is not done by viper.
@@ -278,41 +288,43 @@ func (f *Flag[T]) Add(cmd *cobra.Command) {
 	case int:
 		flags.IntP(f.Name, f.Shorthand, v, f.Usage)
 	case string:
-		usage := f.Usage
+		var usage strings.Builder
+		usage.WriteString(f.Usage)
 		if len(f.Values) > 0 {
 			if len(f.Values) <= 4 {
 				// Display inline for a small number of choices
-				usage += fmt.Sprintf(" (allowed values: %s)", strings.Join(f.Values, ","))
+				fmt.Fprintf(&usage, " (allowed values: %s)", strings.Join(f.Values, ","))
 			} else {
 				// Display as a bullet list for many choices
-				usage += "\nAllowed values:"
+				usage.WriteString("\nAllowed values:")
 				for _, val := range f.Values {
-					usage += fmt.Sprintf("\n  - %s", val)
+					fmt.Fprintf(&usage, "\n  - %s", val)
 				}
 				if v != "" {
-					usage += "\n"
+					usage.WriteString("\n")
 				}
 			}
 		}
-		flags.StringP(f.Name, f.Shorthand, v, usage)
+		flags.StringP(f.Name, f.Shorthand, v, usage.String())
 	case []string:
-		usage := f.Usage
+		var usage strings.Builder
+		usage.WriteString(f.Usage)
 		if len(f.Values) > 0 {
 			if len(f.Values) <= 4 {
 				// Display inline for a small number of choices
-				usage += fmt.Sprintf(" (allowed values: %s)", strings.Join(f.Values, ","))
+				fmt.Fprintf(&usage, " (allowed values: %s)", strings.Join(f.Values, ","))
 			} else {
 				// Display as a bullet list for many choices
-				usage += "\nAllowed values:"
+				usage.WriteString("\nAllowed values:")
 				for _, val := range f.Values {
-					usage += fmt.Sprintf("\n  - %s", val)
+					fmt.Fprintf(&usage, "\n  - %s", val)
 				}
 				if len(v) != 0 {
-					usage += "\n"
+					usage.WriteString("\n")
 				}
 			}
 		}
-		flags.StringSliceP(f.Name, f.Shorthand, v, usage)
+		flags.StringSliceP(f.Name, f.Shorthand, v, usage.String())
 	case bool:
 		flags.BoolP(f.Name, f.Shorthand, v, f.Usage)
 	case time.Duration:
@@ -667,7 +679,7 @@ func (f *Flags) AddFlags(cmd *cobra.Command) {
 }
 
 func (f *Flags) Usages(cmd *cobra.Command) string {
-	var usages string
+	var usages strings.Builder
 	for _, group := range f.groups() {
 		flags := pflag.NewFlagSet(cmd.Name(), pflag.ContinueOnError)
 		lflags := cmd.LocalFlags()
@@ -681,10 +693,10 @@ func (f *Flags) Usages(cmd *cobra.Command) string {
 			continue
 		}
 
-		usages += fmt.Sprintf("%s Flags\n", group.Name())
-		usages += flags.FlagUsages() + "\n"
+		fmt.Fprintf(&usages, "%s Flags\n", group.Name())
+		usages.WriteString(flags.FlagUsages() + "\n")
 	}
-	return strings.TrimSpace(usages)
+	return strings.TrimSpace(usages.String())
 }
 
 func (f *Flags) Bind(cmd *cobra.Command) error {

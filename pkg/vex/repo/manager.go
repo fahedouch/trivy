@@ -104,6 +104,11 @@ func (m *Manager) Config(ctx context.Context) (Config, error) {
 	}
 
 	for i, repo := range conf.Repositories {
+		// The repository name is joined onto the cache directory, so reject names that are not
+		// local relative paths to prevent path traversal (e.g., "../foo", "/foo", or "C:\foo" on Windows).
+		if !filepath.IsLocal(repo.Name) {
+			return Config{}, xerrors.Errorf("invalid repository name %q: must be a local relative path", repo.Name)
+		}
 		conf.Repositories[i].dir = filepath.Join(m.cacheDir, repoDir, repo.Name)
 	}
 
@@ -163,7 +168,7 @@ func (m *Manager) List(ctx context.Context) error {
 
 	var output strings.Builder
 
-	output.WriteString(fmt.Sprintf("VEX Repositories (config: %s)\n\n", m.configFile))
+	fmt.Fprintf(&output, "VEX Repositories (config: %s)\n\n", m.configFile)
 
 	if len(conf.Repositories) == 0 {
 		output.WriteString("No repositories configured.\n")
@@ -177,7 +182,7 @@ func (m *Manager) List(ctx context.Context) error {
 			if repo.Insecure {
 				tlsVerify = "\n  TLS Verify: No"
 			}
-			output.WriteString(fmt.Sprintf("- Name: %s\n  URL: %s\n  Status: %s%s\n\n", repo.Name, repo.URL, status, tlsVerify))
+			fmt.Fprintf(&output, "- Name: %s\n  URL: %s\n  Status: %s%s\n\n", repo.Name, repo.URL, status, tlsVerify)
 		}
 	}
 

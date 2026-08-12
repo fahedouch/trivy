@@ -18,6 +18,7 @@ import (
 	"github.com/aquasecurity/trivy/internal/testutil"
 	"github.com/aquasecurity/trivy/pkg/iac/terraform"
 	"github.com/aquasecurity/trivy/pkg/log"
+	"github.com/aquasecurity/trivy/pkg/mapfs"
 	"github.com/aquasecurity/trivy/pkg/set"
 )
 
@@ -733,6 +734,52 @@ resource "aws_s3_bucket" "this" {
 		require.NotNil(t, attr)
 		assert.Contains(t, []string{"foo", "bar"}, attr.AsStringValueOrDefault("", block).Value())
 	}
+}
+
+func Test_ForEachOnLocalWithUnknownObjectValues(t *testing.T) {
+	fs := testutil.CreateFS(map[string]string{
+		"main.tf": `
+variable "bucket_names" {
+  type = map(string)
+}
+
+variable "bucket_details" {
+  type = map(object({
+    bucket = string
+    tags   = optional(map(string), {})
+  }))
+}
+
+locals {
+  bucket_config = {
+    for name, _ in var.bucket_names :
+    name => var.bucket_details[name]
+  }
+}
+
+resource "aws_s3_bucket" "this" {
+  for_each = local.bucket_config
+  bucket   = each.value.bucket
+  tags     = each.value.tags
+}
+`,
+		"main.tfvars": `
+bucket_names = {
+  app-logs = "ipsos-app-logs-dev"
+  app-data = "ipsos-app-data-dev"
+}
+`,
+	})
+
+	parser := New(fs, "",
+		OptionStopOnHCLError(true),
+		OptionWithTFVarsPaths("main.tfvars"),
+	)
+	require.NoError(t, parser.ParseFS(t.Context(), "."))
+
+	modules, err := parser.EvaluateAll(t.Context())
+	require.NoError(t, err)
+	assert.Len(t, modules, 1)
 }
 
 func Test_ForEachRefToVariableWithDefault(t *testing.T) {
@@ -2177,7 +2224,17 @@ resource "test" "fileset-func" {
 		"path/b.py": ``,
 	}
 
-	resources := parse(t, files).GetResourcesByType("test")
+	fsys := mapfs.New()
+	for name, content := range files {
+		fsys.MkdirAll(filepath.Dir(name), 0o755)
+		fsys.WriteVirtualFile(name, []byte(content), 0o644)
+	}
+
+	parser := New(fsys, "", OptionStopOnHCLError(true))
+	require.NoError(t, parser.ParseFS(t.Context(), "."))
+	modules, err := parser.EvaluateAll(t.Context())
+	require.NoError(t, err)
+	resources := modules.GetResourcesByType("test")
 	require.Len(t, resources, 1)
 	attr := resources[0].GetAttribute("value")
 	require.NotNil(t, attr)

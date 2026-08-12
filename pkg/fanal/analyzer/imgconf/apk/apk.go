@@ -99,13 +99,13 @@ func (a alpineCmdAnalyzer) fetchApkIndexArchive(targetOS types.OS) (*apkIndex, e
 
 	url := fmt.Sprintf(a.apkIndexArchiveURL, osVer)
 	var reader io.Reader
-	if strings.HasPrefix(url, "file://") {
-		var err error
-		reader, err = builtinos.Open(strings.TrimPrefix(url, "file://"))
+	if filePath, ok := strings.CutPrefix(url, "file://"); ok {
+		f, err := builtinos.Open(filePath)
 		if err != nil {
 			return nil, xerrors.Errorf("failed to read APKINDEX archive file: %w", err)
 		}
-		defer reader.(*builtinos.File).Close()
+		defer f.Close()
+		reader = f
 	} else {
 		// nolint
 		resp, err := http.Get(url)
@@ -126,8 +126,8 @@ func (a alpineCmdAnalyzer) fetchApkIndexArchive(targetOS types.OS) (*apkIndex, e
 func (a alpineCmdAnalyzer) parseConfig(apkIndexArchive *apkIndex, config *v1.ConfigFile) (packages []types.Package) {
 	envs := make(map[string]string)
 	for _, env := range config.Config.Env {
-		index := strings.Index(env, "=")
-		envs["$"+env[:index]] = env[index+1:]
+		before, after, _ := strings.Cut(env, "=")
+		envs["$"+before] = after
 	}
 
 	uniqPkgs := make(map[string]types.Package)

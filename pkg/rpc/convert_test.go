@@ -59,6 +59,9 @@ func TestConvertToRpcPkgs(t *testing.T) {
 						Digest:       "SHA1:901a7b55410321c4d35543506cff2a8613ef5aa2",
 						Indirect:     true,
 						Relationship: ftypes.RelationshipIndirect,
+						Repository: ftypes.PackageRepository{
+							Class: ftypes.RepositoryClassThirdParty,
+						},
 						Identifier: ftypes.PkgIdentifier{
 							UID: "01",
 						},
@@ -94,6 +97,9 @@ func TestConvertToRpcPkgs(t *testing.T) {
 					Digest:       "SHA1:901a7b55410321c4d35543506cff2a8613ef5aa2",
 					Indirect:     true,
 					Relationship: 4,
+					Repository: &common.PackageRepository{
+						Class: "third-party",
+					},
 					Identifier: &common.PkgIdentifier{
 						Uid: "01",
 					},
@@ -225,6 +231,9 @@ func TestConvertFromRpcPkgs(t *testing.T) {
 							Uid: "63f8bef824b960e3",
 						},
 						Maintainer: "alice@example.com",
+						Repository: &common.PackageRepository{
+							Class: "third-party",
+						},
 					},
 				},
 			},
@@ -261,6 +270,9 @@ func TestConvertFromRpcPkgs(t *testing.T) {
 						UID: "63f8bef824b960e3",
 					},
 					Maintainer: "alice@example.com",
+					Repository: ftypes.PackageRepository{
+						Class: ftypes.RepositoryClassThirdParty,
+					},
 				},
 			},
 		},
@@ -271,6 +283,78 @@ func TestConvertFromRpcPkgs(t *testing.T) {
 			assert.Equal(t, tt.want, got, tt.name)
 		})
 	}
+}
+
+func TestConvertPackageRepository(t *testing.T) {
+	tests := []struct {
+		name    string
+		repo    ftypes.PackageRepository
+		rpcRepo *common.PackageRepository
+	}{
+		{
+			name:    "third-party",
+			repo:    ftypes.PackageRepository{Class: ftypes.RepositoryClassThirdParty},
+			rpcRepo: &common.PackageRepository{Class: "third-party"},
+		},
+		{
+			name:    "empty class maps to nil",
+			repo:    ftypes.PackageRepository{},
+			rpcRepo: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.rpcRepo, ConvertToRPCPackageRepository(tt.repo))
+			assert.Equal(t, tt.repo, ConvertFromRPCPackageRepository(tt.rpcRepo))
+		})
+	}
+}
+
+func TestConvertOS(t *testing.T) {
+	tests := []struct {
+		name  string
+		os    ftypes.OS
+		rpcOS *common.OS
+	}{
+		{
+			name: "happy path",
+			os: ftypes.OS{
+				Family: ftypes.Alpine,
+				Name:   "3.20.3",
+			},
+			rpcOS: &common.OS{
+				Family: "alpine",
+				Name:   "3.20.3",
+			},
+		},
+		{
+			name: "all fields",
+			os: ftypes.OS{
+				Family:   ftypes.CentOS,
+				Name:     "7.9.2009",
+				Eosl:     true,
+				Extended: true,
+				Supplier: ftypes.SupplierSeal,
+			},
+			rpcOS: &common.OS{
+				Family:   "centos",
+				Name:     "7.9.2009",
+				Eosl:     true,
+				Extended: true,
+				Supplier: "seal",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.rpcOS, ConvertToRPCOS(tt.os))
+			assert.Equal(t, tt.os, ConvertFromRPCOS(tt.rpcOS))
+		})
+	}
+
+	t.Run("nil", func(t *testing.T) {
+		assert.Equal(t, ftypes.OS{}, ConvertFromRPCOS(nil))
+	})
 }
 
 func TestConvertToRpcVulns(t *testing.T) {

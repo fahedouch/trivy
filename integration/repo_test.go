@@ -199,6 +199,15 @@ func TestRepository(t *testing.T) {
 			golden: goldenUV,
 		},
 		{
+			name: "pylock",
+			args: repoTestArgs{
+				scanner:     types.VulnerabilityScanner,
+				listAllPkgs: true,
+				input:       "testdata/fixtures/repo/pylock",
+			},
+			golden: goldenPyLock,
+		},
+		{
 			name: "pom",
 			args: repoTestArgs{
 				scanner: types.VulnerabilityScanner,
@@ -621,6 +630,8 @@ func buildArgs(t *testing.T, cacheDir, command string, format types.Format, test
 		string(format),
 		"--parallel",
 		strconv.Itoa(testArgs.parallel),
+		// Scan offline for stable test runs: otherwise dependency resolution may reach
+		// remote registries (e.g. Maven Central), which can return a 429
 		"--offline-scan",
 		testArgs.input,
 	}

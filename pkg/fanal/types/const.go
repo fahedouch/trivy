@@ -14,6 +14,14 @@ type (
 	ConfigType = TargetType
 )
 
+// Supplier identifies a third party that rebuilds and ships packages e.g. Seal Security.
+type Supplier string
+
+// Suppliers
+const (
+	SupplierSeal Supplier = "seal"
+)
+
 const (
 	ArtifactJSONSchemaVersion = 1
 	BlobJSONSchemaVersion     = 2
@@ -105,6 +113,7 @@ const (
 	Pipenv         LangType = "pipenv"
 	Poetry         LangType = "poetry"
 	Uv             LangType = "uv"
+	PyLock         LangType = "pylock"
 	CondaPkg       LangType = "conda-pkg"
 	CondaEnv       LangType = "conda-environment"
 	PythonPkg      LangType = "python-pkg"
@@ -142,6 +151,7 @@ var (
 		Alpine,
 		Amazon,
 		Azure,
+		Bottlerocket,
 		CBLMariner,
 		CentOS,
 		CentOSStream,
@@ -214,7 +224,7 @@ const (
 	PipfileLock     = "Pipfile.lock"
 	PoetryLock      = "poetry.lock"
 	UvLock          = "uv.lock"
-	PyLock          = "pylock.toml"
+	PyLockFile      = "pylock.toml"
 
 	GemfileLock = "Gemfile.lock"
 
